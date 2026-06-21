@@ -47,6 +47,9 @@ struct CameraPage {
   private timerCountdownId: number = -1;
   private screenWidth: number = 0;
   private screenHeight: number = 0;
+  // 启动协调：surface 与 权限/初始化 两者都就绪后才启动预览
+  private surfaceReady: boolean = false;
+  private permissionsGranted: boolean = false;
 
   private flashModes: FlashModeItem[] = [
     new FlashModeItem(CameraConstants.FLASH_MODE_OFF, '关闭'),
@@ -69,6 +72,14 @@ struct CameraPage {
     this.screenWidth = displayInfo.width;
     this.screenHeight = displayInfo.height;
 
+    // 同步初始化 CameraManager（不依赖权限），避免与 XComponent.onLoad 时序竞态
+    const context: Context | null = GlobalContext.getInstance().getContext() as Context | null;
+    if (context) {
+      this.cameraVM.initCamera(context);
+      this.hasMultipleCameras = this.cameraVM.getCameraCount() > 1;
+    }
+
+    // 请求权限
     const hasPermission: boolean = await PermissionUtils.checkAllPermissions();
     if (!hasPermission) {
       const granted: boolean = await PermissionUtils.requestAllPermissions();
@@ -77,12 +88,26 @@ struct CameraPage {
         return;
       }
     }
+    this.permissionsGranted = true;
+    this.tryStartPreview();
+  }
 
-    const context: Context | null = GlobalContext.getInstance().getContext() as Context | null;
-    if (context) {
-      this.cameraVM.initCamera(context);
-      this.hasMultipleCameras = this.cameraVM.getCameraCount() > 1;
-    }
+  /**
+   * 协调启动：surface 与 权限/初始化 都就绪后才启动预览
+   * 避免时序竞态导致 "CameraManager 未初始化"
+   */
+  private tryStartPreview(): void {
+    if (this.isCameraReady) return;
+    if (!this.surfaceReady) return;
+    if (!this.permissionsGranted) return;
+    if (!this.surfaceId) return;
+
+    this.cameraVM.startPreview(this.surfaceId).then(() => {
+      this.isCameraReady = true;
+      console.info('[CameraPage] 相机就绪');
+    }).catch((err: Error) => {
+      console.error(`[CameraPage] 启动失败: ${err.message}`);
+    });
   }
 
   async aboutToDisappear(): Promise<void> {
@@ -211,15 +236,10 @@ struct CameraPage {
         .onLoad(() => {
           // 获取真实的 native surface ID
           this.surfaceId = this.xComponentController.getXComponentSurfaceId();
+          this.surfaceReady = true;
           console.info(`[CameraPage] XComponent loaded, surfaceId: ${this.surfaceId}`);
-
-          // 用真实的 surfaceId 启动预览 (VM 默认画幅 4:3 与页面一致)
-          this.cameraVM.startPreview(this.surfaceId).then(() => {
-            this.isCameraReady = true;
-            console.info('[CameraPage] 相机就绪');
-          }).catch((err: Error) => {
-            console.error(`[CameraPage] 启动失败: ${err.message}`);
-          });
+          // 协调启动预览（权限/初始化就绪后才会真正启动）
+          this.tryStartPreview();
         })
         .onDestroy(() => {
           console.info('[CameraPage] XComponent destroyed');
