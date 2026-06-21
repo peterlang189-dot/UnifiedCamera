@@ -1,4 +1,5 @@
 import { promptAction } from '@kit.ArkUI';
+import { display } from '@kit.ArkUI';
 import { CameraViewModel } from '../camera/CameraViewModel';
 import { CameraConstants } from '../camera/CameraConstants';
 import { PermissionUtils } from '../utils/PermissionUtils';
@@ -34,6 +35,8 @@ struct CameraPage {
   @State timerDuration: number = 0;
   @State showTimerIndicator: boolean = false;
   @State timerCountdown: number = 0;
+  @State aspectMode: number = CameraConstants.ASPECT_RATIO_4_3;
+  @State previewAspectValue: number = 3 / 4;  // XComponent 宽/高
 
   // XComponent 控制器 - 获取真实 surface ID
   private xComponentController: XComponentController = new XComponentController();
@@ -42,6 +45,8 @@ struct CameraPage {
   private recordingTimerId: number = -1;
   private recordingSeconds: number = 0;
   private timerCountdownId: number = -1;
+  private screenWidth: number = 0;
+  private screenHeight: number = 0;
 
   private flashModes: FlashModeItem[] = [
     new FlashModeItem(CameraConstants.FLASH_MODE_OFF, '关闭'),
@@ -58,6 +63,11 @@ struct CameraPage {
     this.cameraVM.setOnError((error: string) => {
       promptAction.showToast({ message: error, duration: 2000 });
     });
+
+    // 获取屏幕尺寸用于计算全屏预览比例
+    const displayInfo: display.Display = display.getDefaultDisplaySync();
+    this.screenWidth = displayInfo.width;
+    this.screenHeight = displayInfo.height;
 
     const hasPermission: boolean = await PermissionUtils.checkAllPermissions();
     if (!hasPermission) {
@@ -146,6 +156,33 @@ struct CameraPage {
     promptAction.showToast({ message: msg });
   }
 
+  /**
+   * 切换画幅比例 (全屏 / 4:3 / 1:1)
+   * 更新预览显示比例并重建相机会话使用匹配的 Profile
+   */
+  private async onAspectRatioChange(ratio: number): Promise<void> {
+    if (ratio === this.aspectMode) return;
+    this.aspectMode = ratio;
+
+    // 计算预览显示比例 (宽/高)
+    if (ratio === CameraConstants.ASPECT_RATIO_FULL) {
+      this.previewAspectValue = this.screenWidth / this.screenHeight;
+    } else if (ratio === CameraConstants.ASPECT_RATIO_4_3) {
+      this.previewAspectValue = 3 / 4;
+    } else {
+      this.previewAspectValue = 1.0;
+    }
+
+    promptAction.showToast({ message: `画幅: ${CameraConstants.ASPECT_RATIO_LABELS[ratio]}` });
+
+    // 重建相机会话
+    if (this.surfaceId) {
+      this.isCameraReady = false;
+      await this.cameraVM.setAspectRatio(ratio, this.surfaceId);
+      this.isCameraReady = true;
+    }
+  }
+
   // ===== 计时器 =====
   private startRecordingTimer(): void {
     this.recordingTimerId = setInterval(() => {
@@ -161,7 +198,7 @@ struct CameraPage {
   // ===== UI =====
   build() {
     Stack() {
-      // 相机预览 — 使用 XComponentController
+      // 相机预览 — 使用 XComponentController，宽高比跟随所选画幅
       XComponent({
         id: 'cameraPreview',
         type: XComponentType.SURFACE,
@@ -169,14 +206,14 @@ struct CameraPage {
         libraryname: 'camera'
       })
         .width('100%')
-        .height('100%')
+        .aspectRatio(this.previewAspectValue)
         .backgroundColor(Color.Black)
         .onLoad(() => {
           // 获取真实的 native surface ID
           this.surfaceId = this.xComponentController.getXComponentSurfaceId();
           console.info(`[CameraPage] XComponent loaded, surfaceId: ${this.surfaceId}`);
 
-          // 用真实的 surfaceId 启动预览
+          // 用真实的 surfaceId 启动预览 (VM 默认画幅 4:3 与页面一致)
           this.cameraVM.startPreview(this.surfaceId).then(() => {
             this.isCameraReady = true;
             console.info('[CameraPage] 相机就绪');
@@ -229,6 +266,22 @@ struct CameraPage {
         .width('100%').padding({ left: 12, right: 12 })
       }
       .position({ x: 0, y: 0 }).width('100%').padding({ top: 40 })
+
+      // 画幅选择器 (全屏 / 4:3 / 1:1)
+      Row({ space: 6 }) {
+        ForEach(CameraConstants.ASPECT_RATIO_LABELS, (label: string, idx: number) => {
+          Text(label)
+            .fontSize(12)
+            .fontColor(this.aspectMode === idx ? Color.Black : Color.White)
+            .fontWeight(this.aspectMode === idx ? FontWeight.Bold : FontWeight.Normal)
+            .padding({ left: 10, right: 10, top: 4, bottom: 4 })
+            .borderRadius(12)
+            .backgroundColor(this.aspectMode === idx ? '#FFD700' : 'rgba(0,0,0,0.4)')
+            .onClick(() => this.onAspectRatioChange(idx))
+        }, (label: string, idx: number) => `${label}-${idx}`)
+      }
+      .position({ x: '50%', y: 90 })
+      .translate({ x: '-50%' })
 
       // 定时倒计时
       if (this.showTimerIndicator) {

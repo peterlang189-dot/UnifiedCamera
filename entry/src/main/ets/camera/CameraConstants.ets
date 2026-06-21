@@ -49,6 +49,17 @@ export class CameraConstants {
   static readonly RECORDING_STATE_RECORDING: number = 1;
   static readonly RECORDING_STATE_PAUSED: number = 2;
 
+  // 拍照画幅比例
+  static readonly ASPECT_RATIO_FULL: number = 0;   // 全屏 (16:9)
+  static readonly ASPECT_RATIO_4_3: number = 1;    // 4:3
+  static readonly ASPECT_RATIO_1_1: number = 2;    // 1:1
+
+  // 画幅比例显示文本
+  static readonly ASPECT_RATIO_LABELS: string[] = ['全屏', '4:3', '1:1'];
+
+  // 目标宽高比 (width/height, 横向传感器)
+  static readonly ASPECT_RATIO_VALUES: number[] = [16 / 9, 4 / 3, 1.0];
+
   // XComponent ID
   static readonly PREVIEW_SURFACE_ID: string = 'cameraPreviewSurface';
 }
