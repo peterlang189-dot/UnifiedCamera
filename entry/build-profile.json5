@@ -1,0 +1,28 @@
+{
+  "apiType": "stageMode",
+  "buildOption": {
+    "nativeLib": {
+      "filter": {
+        "excludes": []
+      }
+    }
+  },
+  "buildOptionSet": [
+    {
+      "name": "debug",
+      "debuggable": true
+    },
+    {
+      "name": "release",
+      "debuggable": false
+    }
+  ],
+  "targets": [
+    {
+      "name": "default"
+    },
+    {
+      "name": "ohosTest"
+    }
+  ]
+}

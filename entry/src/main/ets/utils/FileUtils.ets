@@ -1,40 +1,65 @@
-import { fileIo as fs } from '@kit.CoreFileKit';
+import { fileIo } from '@kit.CoreFileKit';
 import { photoAccessHelper } from '@kit.MediaLibraryKit';
-import { CameraConstants } from '../camera/CameraConstants';
 import { GlobalContext } from './GlobalContext';
 
 /**
- * 文件管理工具类
- * 负责照片和视频文件的保存
+ * 文件管理工具类 — SDK 26 兼容版
  */
 export class FileUtils {
   /**
-   * 将 ArrayBuffer 保存为 JPEG 照片到相册
-   * @param imageBuffer 图片数据
-   * @param fileName 文件名（不含扩展名）
-   * @returns 保存后的 URI，失败返回空字符串
+   * 保存媒体文件到相册
+   * @param sourceUri 源文件 URI
+   * @param type 类型 'photo' | 'video'
+   * @returns 保存后的 URI
    */
-  public static async savePhotoToGallery(imageBuffer: ArrayBuffer, fileName?: string): Promise<string> {
+  public static async saveMediaToGallery(sourceUri: string, type: string): Promise<string> {
     try {
-      const context = GlobalContext.getInstance().getContext() as any;
+      const context = GlobalContext.getInstance().getContext() as Context;
       if (!context) {
         console.error('[FileUtils] Context 未初始化!');
         return '';
       }
 
-      const name = fileName || `IMG_${Date.now()}`;
       const helper = photoAccessHelper.getPhotoAccessHelper(context);
-
-      // 创建照片资源
       const uri = await helper.createAsset(
-        photoAccessHelper.PhotoType.IMAGE,
-        'jpg'
+        type === 'video' ? photoAccessHelper.PhotoType.VIDEO : photoAccessHelper.PhotoType.IMAGE,
+        type === 'video' ? 'mp4' : 'jpg'
       );
 
-      // 写入图片数据
-      const fd = await fs.open(uri, fs.OpenMode.WRITE_ONLY);
-      await fs.write(fd, imageBuffer);
-      await fs.close(fd);
+      // 复制文件内容
+      const srcFile = fileIo.openSync(sourceUri, fileIo.OpenMode.READ_ONLY);
+      const stat = fileIo.statSync(sourceUri);
+      const buffer = new ArrayBuffer(stat.size);
+      fileIo.readSync(srcFile.fd, buffer);
+      fileIo.closeSync(srcFile);
+
+      const dstFile = fileIo.openSync(uri, fileIo.OpenMode.WRITE_ONLY);
+      fileIo.writeSync(dstFile.fd, buffer);
+      fileIo.closeSync(dstFile);
+
+      console.info(`[FileUtils] ${type} 已保存: ${uri}`);
+      return uri;
+    } catch (err) {
+      console.error(`[FileUtils] 保存${type}失败: ${JSON.stringify(err)}`);
+      return '';
+    }
+  }
+
+  /**
+   * 保存 ArrayBuffer 为照片
+   */
+  public static async savePhotoBuffer(imageBuffer: ArrayBuffer, fileName?: string): Promise<string> {
+    try {
+      const context = GlobalContext.getInstance().getContext() as Context;
+      if (!context) return '';
+
+      const name = fileName || `IMG_${Date.now()}`;
+      const helper = photoAccessHelper.getPhotoAccessHelper(context);
+      const uri = await helper.createAsset(photoAccessHelper.PhotoType.IMAGE, 'jpg');
+
+      const dstFile = fileIo.openSync(uri, fileIo.OpenMode.WRITE_ONLY);
+      fileIo.writeSync(dstFile.fd, imageBuffer);
+      fileIo.closeSync(dstFile);
 
       console.info(`[FileUtils] 照片已保存: ${uri}`);
       return uri;
@@ -42,67 +67,5 @@ export class FileUtils {
       console.error(`[FileUtils] 保存照片失败: ${JSON.stringify(err)}`);
       return '';
     }
-  }
-
-  /**
-   * 将视频文件移动到相册
-   * @param videoPath 临时视频文件路径
-   * @param fileName 文件名
-   * @returns 保存后的 URI
-   */
-  public static async saveVideoToGallery(videoPath: string, fileName?: string): Promise<string> {
-    try {
-      const context = GlobalContext.getInstance().getContext() as any;
-      if (!context) {
-        console.error('[FileUtils] Context 未初始化!');
-        return '';
-      }
-
-      const name = fileName || `VID_${Date.now()}`;
-      const helper = photoAccessHelper.getPhotoAccessHelper(context);
-
-      // 创建视频资源
-      const uri = await helper.createAsset(
-        photoAccessHelper.PhotoType.VIDEO,
-        'mp4'
-      );
-
-      // 读取临时视频文件并写入到相册
-      const srcFd = await fs.open(videoPath, fs.OpenMode.READ_ONLY);
-      const stat = await fs.stat(videoPath);
-      const buffer = new ArrayBuffer(stat.size);
-      await fs.read(srcFd, buffer);
-      await fs.close(srcFd);
-
-      const dstFd = await fs.open(uri, fs.OpenMode.WRITE_ONLY);
-      await fs.write(dstFd, buffer);
-      await fs.close(dstFd);
-
-      // 删除临时文件
-      try {
-        await fs.unlink(videoPath);
-      } catch (e) {
-        console.warn(`[FileUtils] 删除临时视频文件失败: ${JSON.stringify(e)}`);
-      }
-
-      console.info(`[FileUtils] 视频已保存: ${uri}`);
-      return uri;
-    } catch (err) {
-      console.error(`[FileUtils] 保存视频失败: ${JSON.stringify(err)}`);
-      return '';
-    }
-  }
-
-  /**
-   * 获取应用沙箱中的临时文件路径
-   * @param extension 扩展名（不含点）
-   * @returns 完整路径
-   */
-  public static async getTempFilePath(extension: string): Promise<string> {
-    const context = GlobalContext.getInstance().getContext() as any;
-    if (!context) {
-      return `temp_${Date.now()}.${extension}`;
-    }
-    return `${context.filesDir}/temp_${Date.now()}.${extension}`;
   }
 }

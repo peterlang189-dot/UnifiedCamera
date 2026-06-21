@@ -1,15 +1,27 @@
 {
   "app": {
-    "signingConfigs": [],
-    "compileSdkVersion": 12,
-    "compatibleSdkVersion": 10,
+    "signingConfigs": [
+      {
+        "name": "default",
+        "type": "HarmonyOS",
+        "material": {
+          "certpath": "/Users/a0000/.ohos/config/default_UnifiedCamera_ZM7H0IaSs0DMOrWVNI9MaNf0J5NSFfHMse_PdQIEg5g=.cer",
+          "keyAlias": "debugKey",
+          "keyPassword": "0000001B861AFDB655C31CF7BB8B9FF82212318659E3BC9DAE810CEC588DD8AC8B060F3DB39A0DB6172841",
+          "profile": "/Users/a0000/.ohos/config/default_UnifiedCamera_ZM7H0IaSs0DMOrWVNI9MaNf0J5NSFfHMse_PdQIEg5g=.p7b",
+          "signAlg": "SHA256withECDSA",
+          "storeFile": "/Users/a0000/.ohos/config/default_UnifiedCamera_ZM7H0IaSs0DMOrWVNI9MaNf0J5NSFfHMse_PdQIEg5g=.p12",
+          "storePassword": "0000001B7748B14575DC42C0FE02A4F5EDA11004C4DE24746ACB2224F27725E900CBD32EE70A379F85EC31"
+        }
+      }
+    ],
     "products": [
       {
         "name": "default",
         "signingConfig": "default",
-        "targetSdkVersion": 12,
-        "compatibleSdkVersion": 10,
-        "runtimeOS": "HarmonyOS"
+        "compatibleSdkVersion": "5.0.0(12)",
+        "runtimeOS": "HarmonyOS",
+        "targetSdkVersion": "26.0.0"
       }
     ]
   },
@@ -20,7 +32,9 @@
       "targets": [
         {
           "name": "default",
-          "applyToProducts": ["default"]
+          "applyToProducts": [
+            "default"
+          ]
         }
       ]
     }
