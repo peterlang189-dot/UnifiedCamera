@@ -1,0 +1,32 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "鸿蒙相机应用 - 支持拍照与录像"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "相机应用入口"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "UnifiedCamera"
+    },
+    {
+      "name": "camera_permission_reason",
+      "value": "用于拍照和录像功能"
+    },
+    {
+      "name": "microphone_permission_reason",
+      "value": "用于录制视频时采集音频"
+    },
+    {
+      "name": "write_media_permission_reason",
+      "value": "用于保存拍摄的照片和视频到相册"
+    },
+    {
+      "name": "read_media_permission_reason",
+      "value": "用于访问媒体文件进行预览"
+    }
+  ]
+}
