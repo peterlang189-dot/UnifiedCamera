@@ -52,24 +52,20 @@ export interface CameraNativeModule {
   applyFilter(rgbaBuffer: ArrayBuffer, width: number, height: number, filterType: number, strength?: number): void;
 
   /**
-   * 调整图像亮度
+   * 调整图像亮度 (原地修改)
    * @param rgbaBuffer RGBA 数据
-   * @param width 宽度
-   * @param height 高度
-   * @param pixelCount 像素总数
+   * @param pixelCount 像素总数 (width * height)
    * @param factor 亮度因子 (-1.0 ~ 1.0)
    */
-  adjustBrightness(rgbaBuffer: ArrayBuffer, width: number, height: number, pixelCount: number, factor: number): void;
+  adjustBrightness(rgbaBuffer: ArrayBuffer, pixelCount: number, factor: number): void;
 
   /**
-   * 调整图像对比度
+   * 调整图像对比度 (原地修改)
    * @param rgbaBuffer RGBA 数据
-   * @param width 宽度
-   * @param height 高度
-   * @param pixelCount 像素总数
+   * @param pixelCount 像素总数 (width * height)
    * @param factor 对比度因子 (0.0 ~ 2.0, 1.0=原始)
    */
-  adjustContrast(rgbaBuffer: ArrayBuffer, width: number, height: number, pixelCount: number, factor: number): void;
+  adjustContrast(rgbaBuffer: ArrayBuffer, pixelCount: number, factor: number): void;
 
   /**
    * 翻转图像

@@ -182,24 +182,22 @@ napi_value NAPI_ApplyFilter(napi_env env, napi_callback_info info) {
 // ============================================================
 
 napi_value NAPI_AdjustBrightness(napi_env env, napi_callback_info info) {
-    size_t argc = 5;
-    napi_value args[5] = {nullptr};
+    size_t argc = 3;
+    napi_value args[3] = {nullptr};
     napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
 
-    if (argc < 5) {
-        napi_throw_error(env, nullptr, "Need 5 arguments: (buffer, width, height, pixelCount, factor)");
+    if (argc < 3) {
+        napi_throw_error(env, nullptr, "Need 3 arguments: (buffer, pixelCount, factor)");
         return nullptr;
     }
 
     uint8_t* rgbaData = GetBufferData(env, args[0]);
 
-    uint32_t width = 0, height = 0, pixelCount = 0;
-    napi_get_value_uint32(env, args[1], &width);
-    napi_get_value_uint32(env, args[2], &height);
-    napi_get_value_uint32(env, args[3], &pixelCount);
+    uint32_t pixelCount = 0;
+    napi_get_value_uint32(env, args[1], &pixelCount);
 
     double factor = 0.0;
-    napi_get_value_double(env, args[4], &factor);
+    napi_get_value_double(env, args[2], &factor);
 
     if (!rgbaData) {
         napi_throw_error(env, nullptr, "Invalid buffer");
@@ -218,24 +216,22 @@ napi_value NAPI_AdjustBrightness(napi_env env, napi_callback_info info) {
 // ============================================================
 
 napi_value NAPI_AdjustContrast(napi_env env, napi_callback_info info) {
-    size_t argc = 5;
-    napi_value args[5] = {nullptr};
+    size_t argc = 3;
+    napi_value args[3] = {nullptr};
     napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
 
-    if (argc < 5) {
-        napi_throw_error(env, nullptr, "Need 5 arguments: (buffer, width, height, pixelCount, factor)");
+    if (argc < 3) {
+        napi_throw_error(env, nullptr, "Need 3 arguments: (buffer, pixelCount, factor)");
         return nullptr;
     }
 
     uint8_t* rgbaData = GetBufferData(env, args[0]);
 
-    uint32_t width = 0, height = 0, pixelCount = 0;
-    napi_get_value_uint32(env, args[1], &width);
-    napi_get_value_uint32(env, args[2], &height);
-    napi_get_value_uint32(env, args[3], &pixelCount);
+    uint32_t pixelCount = 0;
+    napi_get_value_uint32(env, args[1], &pixelCount);
 
     double factor = 1.0;
-    napi_get_value_double(env, args[4], &factor);
+    napi_get_value_double(env, args[2], &factor);
 
     if (!rgbaData) {
         napi_throw_error(env, nullptr, "Invalid buffer");

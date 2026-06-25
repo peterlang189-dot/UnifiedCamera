@@ -124,7 +124,7 @@ public:
                            size_t* jpegSize);
 
     /**
-     * 应用图像滤镜
+     * 应用图像滤镜 (统一入口)
      * @param rgbaData 输入/输出的 RGBA 数据 (原地修改)
      * @param width 宽度
      * @param height 高度
@@ -201,6 +201,17 @@ private:
     // 亮度对比度查找表生成
     static void buildBrightnessLUT(uint8_t* lut, float factor);
     static void buildContrastLUT(uint8_t* lut, float factor);
+
+    // 独立滤镜方法（从 applyFilter 拆分，降低圈复杂度）
+    static void applyGrayscale(uint8_t* rgbaData, uint32_t pixelCount);
+    static void applySepia(uint8_t* rgbaData, uint32_t pixelCount);
+    static void applyNegative(uint8_t* rgbaData, uint32_t pixelCount);
+    static void applyBlur(uint8_t* rgbaData, uint32_t width, uint32_t height);
+    static void applySharpen(uint8_t* rgbaData, uint32_t width, uint32_t height);
+
+    // 滤镜分发函数指针类型：func(rgbaData, width_or_pixelCount, height_or_unused)
+    using FilterFunc = void (*)(uint8_t*, uint32_t, uint32_t);
+    static FilterFunc getFilterFunc(FilterType filter);
 
 #ifdef __ARM_NEON
     // NEON SIMD 加速路径
