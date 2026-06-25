@@ -35,7 +35,7 @@ export class CameraViewModel {
   // 缓存设备支持的 Profile
   private cachedPreviewProfiles: Array<camera.Profile> = [];
   private cachedPhotoProfiles: Array<camera.Profile> = [];
-  private cachedVideoProfiles: Array<camera.Profile> = [];
+  private cachedVideoProfiles: Array<camera.VideoProfile> = [];
 
   // 可选滤镜处理 (由外部设置)
   private postProcessFilter: number = 0;    // FilterType.NONE = 无后处理
@@ -54,10 +54,10 @@ export class CameraViewModel {
 
       // 输出版本信息确认原生模块已加载
       try {
-        const version = nativeModule.getProcessorVersion();
+        const version: string = nativeModule.getProcessorVersion() as string;
         console.info(`[CameraVM] 原生模块已加载: ${version}`);
-      } catch (e) {
-        console.warn(`[CameraVM] 原生模块不可用: ${JSON.stringify(e)}`);
+      } catch (err) {
+        console.warn('[CameraVM] 原生模块不可用');
       }
     } catch (err) {
       const error = err as BusinessError;
@@ -121,8 +121,8 @@ export class CameraViewModel {
       try {
         const videoCap: camera.CameraOutputCapability =
           this.cameraManager.getSupportedOutputCapability(cameraDevice, camera.SceneMode.NORMAL_VIDEO);
-        this.cachedVideoProfiles = videoCap.previewProfiles || [];
-      } catch (e) {
+        this.cachedVideoProfiles = videoCap.videoProfiles || [];
+      } catch (err) {
         this.cachedVideoProfiles = [];
       }
 
@@ -177,8 +177,8 @@ export class CameraViewModel {
       if (savedUri && this.onPhotoCaptureCallback) {
         this.onPhotoCaptureCallback(savedUri);
       }
-    } catch (e) {
-      console.error(`[CameraVM] 照片处理失败: ${JSON.stringify(e)}`);
+    } catch (err) {
+      console.error(`[CameraVM] 照片处理失败`);
       // 即使后处理失败，仍通知原始照片已保存
       if (this.onPhotoCaptureCallback) {
         this.onPhotoCaptureCallback(photoUri);
@@ -228,8 +228,8 @@ export class CameraViewModel {
       pixelMap.release();
       imageSource.release();
       imagePacker.release();
-    } catch (e) {
-      console.error(`[CameraVM] 原生滤镜处理失败: ${JSON.stringify(e)}`);
+    } catch (err) {
+      console.error(`[CameraVM] 原生滤镜处理失败`);
     }
   }
 
@@ -273,32 +273,47 @@ export class CameraViewModel {
       // 2. 创建并配置 AVRecorder
       this.avRecorder = await media.createAVRecorder();
 
+      // AVRecorderProfile 是一个接口对象 (含编码参数), 而非枚举值
+      const avProfile: media.AVRecorderProfile = {
+        audioBitrate: 48000,
+        audioChannels: 2,
+        audioCodec: media.CodecMimeType.AUDIO_AAC,
+        audioSampleRate: 48000,
+        fileFormat: media.ContainerFormatType.CFT_MPEG_4,
+        videoBitrate: CameraConstants.VIDEO_BITRATE,
+        videoCodec: media.CodecMimeType.VIDEO_AVC,
+        videoFrameWidth: CameraConstants.VIDEO_WIDTH,
+        videoFrameHeight: CameraConstants.VIDEO_HEIGHT,
+        videoFrameRate: CameraConstants.VIDEO_FRAME_RATE
+      };
+
       const avConfig: media.AVRecorderConfig = {
         audioSourceType: media.AudioSourceType.AUDIO_SOURCE_TYPE_MIC,
         videoSourceType: media.VideoSourceType.VIDEO_SOURCE_TYPE_SURFACE_YUV,
-        profile: media.AVRecorderProfile.AV_RECORDER_PROFILE_1080P_30,
-        url: `fd://${this.videoOutputFileFd}`,
-        videoConfig: {
-          videoBitrate: CameraConstants.VIDEO_BITRATE,
-          videoFrameWidth: CameraConstants.VIDEO_WIDTH,
-          videoFrameHeight: CameraConstants.VIDEO_HEIGHT,
-          videoFrameRate: CameraConstants.VIDEO_FRAME_RATE
-        }
+        profile: avProfile,
+        url: `fd://${this.videoOutputFileFd}`
       };
 
       await this.avRecorder.prepare(avConfig);
       const recorderSurfaceId: string = await this.avRecorder.getInputSurface();
       console.info(`[CameraVM] AVRecorder 已准备, surfaceId=${recorderSurfaceId}`);
 
-      // 3. 选择视频 Profile
-      const cameraDevice = this.supportedCameras[this.currentCameraIndex];
-      let videoProfile: camera.Profile | null = null;
+      // 3. 选择视频 VideoProfile (含 frameRateRange)
+      let videoProfile: camera.VideoProfile | null = null;
       if (this.cachedVideoProfiles.length > 0) {
-        videoProfile = this.selectProfile(this.cachedVideoProfiles, this.currentAspectRatio);
-      }
-      // 降级: 使用预览 Profile
-      if (!videoProfile && this.cachedPreviewProfiles.length > 0) {
-        videoProfile = this.cachedPreviewProfiles[0];
+        // VideoProfile 继承 Profile, 按画幅比例选择
+        const target: number = CameraConstants.ASPECT_RATIO_VALUES[this.currentAspectRatio];
+        let bestDiff: number = Number.MAX_VALUE;
+        for (const vp of this.cachedVideoProfiles) {
+          if (vp.size.height === 0) continue;
+          const ratio: number = vp.size.width / vp.size.height;
+          const diff: number = Math.abs(ratio - target);
+          if (diff < bestDiff - 0.01 ||
+              (Math.abs(diff - bestDiff) < 0.01 && vp.size.width * vp.size.height > (videoProfile ? videoProfile.size.width * videoProfile.size.height : 0))) {
+            bestDiff = diff;
+            videoProfile = vp;
+          }
+        }
       }
       if (!videoProfile) throw new Error('无可用视频Profile');
 
@@ -352,8 +367,8 @@ export class CameraViewModel {
           this.captureSession.beginConfig();
           this.captureSession.removeOutput(this.videoOutput);
           await this.captureSession.commitConfig();
-        } catch (e) {
-          console.warn(`[CameraVM] 移除VideoOutput失败: ${JSON.stringify(e)}`);
+        } catch (err) {
+          console.warn(`[CameraVM] 移除VideoOutput失败`);
         }
       }
 
@@ -372,11 +387,11 @@ export class CameraViewModel {
 
   private cleanupVideoResources(): void {
     if (this.videoOutputFileFd >= 0) {
-      try { fileIo.closeSync({ fd: this.videoOutputFileFd } as any); } catch (e) { /* ignore */ }
+      try { fileIo.closeSync(this.videoOutputFileFd); } catch (err) { /* ignore */ }
       this.videoOutputFileFd = -1;
     }
     if (this.avRecorder) {
-      try { this.avRecorder.release(); } catch (e) { /* ignore */ }
+      try { this.avRecorder.release(); } catch (err) { /* ignore */ }
       this.avRecorder = null;
     }
   }

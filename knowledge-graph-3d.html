@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UnifiedCamera — 3D 知识图谱</title>
+<style>
+  body { margin: 0; overflow: hidden; background: #0a0a1a; font-family: 'SF Mono', 'Menlo', monospace; }
+  #graph { width: 100vw; height: 100vh; }
+  #legend {
+    position: absolute; top: 20px; right: 20px;
+    background: rgba(10,10,30,0.9); border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 12px; padding: 16px 20px; color: #ccc; font-size: 13px;
+    backdrop-filter: blur(10px); pointer-events: none;
+  }
+  #legend h3 { margin: 0 0 10px; color: #fff; font-size: 15px; }
+  .legend-item { display: flex; align-items: center; margin: 5px 0; gap: 8px; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  #info {
+    position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%);
+    background: rgba(10,10,30,0.85); border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 10px; padding: 10px 24px; color: #888; font-size: 12px;
+    backdrop-filter: blur(10px);
+  }
+  #tooltip {
+    position: absolute; pointer-events: none;
+    background: rgba(0,0,0,0.92); border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 8px; padding: 10px 14px; color: #fff; font-size: 12px;
+    max-width: 360px; display: none; z-index: 10;
+  }
+</style>
+</head>
+<body>
+
+<div id="graph"></div>
+
+<div id="legend">
+  <h3>📊 图例</h3>
+  <div class="legend-item"><div class="legend-dot" style="background:#ff6b6b"></div> Method (方法)</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#ffd93d"></div> Function (函数)</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#6bcb77"></div> Class (类)</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#4d96ff"></div> Module (模块)</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#9b59b6"></div> Interface/Enum</div>
+</div>
+
+<div id="info">
+  🖱 拖拽旋转 &nbsp;|&nbsp; 滚轮缩放 &nbsp;|&nbsp; 右键平移 &nbsp;|&nbsp; 悬停节点查看详情 &nbsp;|&nbsp; 节点: <span id="nodeCount">0</span> &nbsp; 边: <span id="edgeCount">0</span>
+</div>
+
+<div id="tooltip"></div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+
+// ============================================================
+// 知识图谱数据 (从 Codebase Memory MCP 提取)
+// ============================================================
+const graphData = {
+  nodes: [
+    // --- Methods (滤镜 + 图像处理) ---
+    { id:"applyFilter",       label:"Method",   group:"Method",   file:"camera_native.cpp", desc:"统一滤镜入口 (重构后复杂度11)", complexity:11, size:10 },
+    { id:"nv21ToRGBA_NEON",   label:"Method",   group:"Method",   file:"camera_native.cpp", desc:"NEON SIMD YUV→RGBA 加速 (139行完整实现)", complexity:3, size:9 },
+    { id:"nv21ToRGBA",        label:"Method",   group:"Method",   file:"camera_native.cpp", desc:"NV21→RGBA 标量转换", complexity:5, size:7 },
+    { id:"nv21ToNV12",        label:"Method",   group:"Method",   file:"camera_native.cpp", desc:"NV21→NV12 格式转换", complexity:2, size:5 },
+    { id:"rotateImage",       label:"Method",   group:"Method",   file:"camera_native.cpp", desc:"图像旋转 (90/180/270°)", complexity:11, size:8 },
+    { id:"mirrorHorizontal",  label:"Method",   group:"Method",   file:"camera_native.cpp", desc:"水平翻转", complexity:2, size:5 },
+    { id:"mirrorVertical",    label:"Method",   group:"Method",   file:"camera_native.cpp", desc:"垂直翻转", complexity:1, size:4 },
+    { id:"rgbaToJPEG",        label:"Method",   group:"Method",   file:"camera_native.cpp", desc:"RGBA→JPEG (占位)", complexity:1, size:3 },
+    { id:"applyGrayscale",    label:"Method",   group:"Method",   file:"camera_native.cpp", desc:"灰度滤镜", complexity:1, size:4 },
+    { id:"applySepia",        label:"Method",   group:"Method",   file:"camera_native.cpp", desc:"复古滤镜", complexity:1, size:4 },
+    { id:"applyNegative",     label:"Method",   group:"Method",   file:"camera_native.cpp", desc:"负片滤镜", complexity:1, size:4 },
+    { id:"applyBlur",         label:"Method",   group:"Method",   file:"camera_native.cpp", desc:"3x3均值模糊", complexity:5, size:5 },
+    { id:"applySharpen",      label:"Method",   group:"Method",   file:"camera_native.cpp", desc:"拉普拉斯锐化", complexity:5, size:5 },
+    { id:"adjustBrightness",  label:"Method",   group:"Method",   file:"camera_native.cpp", desc:"亮度调整 (LUT)", complexity:1, size:5 },
+    { id:"adjustContrast",    label:"Method",   group:"Method",   file:"camera_native.cpp", desc:"对比度调整 (LUT)", complexity:1, size:5 },
+    { id:"buildBrightnessLUT",label:"Method",   group:"Method",   file:"camera_native.cpp", desc:"亮度LUT生成", complexity:1, size:3 },
+    { id:"buildContrastLUT",  label:"Method",   group:"Method",   file:"camera_native.cpp", desc:"对比度LUT生成", complexity:1, size:3 },
+    { id:"getFilterFunc",     label:"Method",   group:"Method",   file:"camera_native.cpp", desc:"滤镜分发表", complexity:10, size:5 },
+    { id:"processFrame",      label:"Method",   group:"Method",   file:"camera_native.cpp", desc:"处理相机帧", complexity:2, size:4 },
+    { id:"registerFrameCallback", label:"Method", group:"Method", file:"camera_native.cpp", desc:"注册帧回调", complexity:1, size:3 },
+    { id:"unregisterFrameCallback", label:"Method", group:"Method", file:"camera_native.cpp", desc:"取消帧回调", complexity:0, size:3 },
+
+    // --- Functions (NAPI 桥接) ---
+    { id:"NAPI_Nv21ToRGBA",       label:"Function", group:"Function", file:"image_processor.cpp", desc:"NAPI: nv21→RGBA 桥接", complexity:2, size:6 },
+    { id:"NAPI_Nv21ToNV12",       label:"Function", group:"Function", file:"image_processor.cpp", desc:"NAPI: nv21→NV12 桥接", complexity:2, size:5 },
+    { id:"NAPI_ApplyFilter",      label:"Function", group:"Function", file:"image_processor.cpp", desc:"NAPI: 滤镜桥接", complexity:3, size:6 },
+    { id:"NAPI_AdjustBrightness", label:"Function", group:"Function", file:"image_processor.cpp", desc:"NAPI: 亮度调整 (精简3参数)", complexity:2, size:5 },
+    { id:"NAPI_AdjustContrast",   label:"Function", group:"Function", file:"image_processor.cpp", desc:"NAPI: 对比度调整 (精简3参数)", complexity:2, size:5 },
+    { id:"NAPI_MirrorImage",      label:"Function", group:"Function", file:"image_processor.cpp", desc:"NAPI: 翻转桥接", complexity:3, size:5 },
+    { id:"NAPI_RotateImage",      label:"Function", group:"Function", file:"image_processor.cpp", desc:"NAPI: 旋转桥接", complexity:3, size:5 },
+    { id:"NAPI_GetProcessorVersion", label:"Function", group:"Function", file:"image_processor.cpp", desc:"NAPI: 版本号", complexity:0, size:3 },
+    { id:"GetBufferData",         label:"Function", group:"Function", file:"image_processor.cpp", desc:"获取ArrayBuffer指针", complexity:1, size:3 },
+    { id:"CreateArrayBuffer",     label:"Function", group:"Function", file:"image_processor.cpp", desc:"创建ArrayBuffer", complexity:1, size:3 },
+    { id:"CameraNativeModuleInit",label:"Function", group:"Function", file:"napi_init.cpp", desc:"NAPI模块初始化入口", complexity:1, size:5 },
+    { id:"RegisterCameraNativeModule", label:"Function", group:"Function", file:"napi_init.cpp", desc:"自动注册模块", complexity:0, size:3 },
+
+    // --- Classes ---
+    { id:"ImageProcessor",    label:"Class", group:"Class", file:"camera_native.h", desc:"图像处理核心类 (24个方法)", size:12 },
+    { id:"CameraNativeManager", label:"Class", group:"Class", file:"camera_native.h", desc:"相机原生管理器", size:7 },
+    { id:"CameraViewModel",   label:"Class", group:"Class", file:"CameraViewModel.ets", desc:"相机业务逻辑 (ArkTS)", size:10 },
+    { id:"CameraPage",        label:"Class", group:"Class", file:"CameraPage.ets", desc:"相机主页面 (ArkUI)", size:9 },
+    { id:"CameraConstants",   label:"Class", group:"Class", file:"CameraConstants.ets", desc:"常量定义", size:6 },
+
+    // --- Enums / Interfaces ---
+    { id:"FilterType",        label:"Enum", group:"Enum", file:"camera_native.h", desc:"滤镜类型 (9种)", size:5 },
+    { id:"ImageFormat",       label:"Enum", group:"Enum", file:"camera_native.h", desc:"图像格式枚举", size:4 },
+    { id:"CameraNativeModule",label:"Interface", group:"Enum", file:"index.d.ts", desc:"原生模块TS接口", size:5 },
+
+    // --- Modules ---
+    { id:"camera_native (module)", label:"Module", group:"Module", file:"camera_native.h", desc:"C++ 原生模块命名空间", size:11 },
+    { id:"image_processor (module)", label:"Module", group:"Module", file:"image_processor.cpp", desc:"NAPI 桥接层", size:9 },
+    { id:"napi_init (module)", label:"Module", group:"Module", file:"napi_init.cpp", desc:"模块注册入口", size:7 },
+    { id:"libcamera_native.so", label:"Module", group:"Module", file:"index.d.ts", desc:"ArkTS import 入口", size:8 },
+    { id:"CameraViewModel.ets", label:"Module", group:"Module", file:"CameraViewModel.ets", desc:"ArkTS 业务层 (录像+C++集成)", size:9 }
+  ],
+
+  links: [
+    // === NAPI桥接 → C++核心 ===
+    { source:"NAPI_Nv21ToRGBA",        target:"nv21ToRGBA",        type:"CALLS" },
+    { source:"NAPI_Nv21ToRGBA",        target:"GetBufferData",     type:"CALLS" },
+    { source:"NAPI_Nv21ToRGBA",        target:"CreateArrayBuffer", type:"CALLS" },
+    { source:"NAPI_Nv21ToNV12",        target:"nv21ToNV12",        type:"CALLS" },
+    { source:"NAPI_ApplyFilter",       target:"applyFilter",       type:"CALLS" },
+    { source:"NAPI_AdjustBrightness",  target:"adjustBrightness",  type:"CALLS" },
+    { source:"NAPI_AdjustContrast",    target:"adjustContrast",    type:"CALLS" },
+    { source:"NAPI_MirrorImage",       target:"mirrorHorizontal",  type:"CALLS" },
+    { source:"NAPI_MirrorImage",       target:"mirrorVertical",    type:"CALLS" },
+    { source:"NAPI_RotateImage",       target:"rotateImage",       type:"CALLS" },
+    { source:"NAPI_RotateImage",       target:"CreateArrayBuffer", type:"CALLS" },
+
+    // === C++ 内部调用链 ===
+    { source:"nv21ToRGBA",             target:"nv21ToRGBA_NEON",   type:"CALLS", desc:"ARM64 NEON路径" },
+    { source:"applyFilter",            target:"applyGrayscale",    type:"CALLS" },
+    { source:"applyFilter",            target:"applySepia",        type:"CALLS" },
+    { source:"applyFilter",            target:"applyNegative",     type:"CALLS" },
+    { source:"applyFilter",            target:"applyBlur",         type:"CALLS" },
+    { source:"applyFilter",            target:"applySharpen",      type:"CALLS" },
+    { source:"applyFilter",            target:"mirrorHorizontal",  type:"CALLS" },
+    { source:"applyFilter",            target:"adjustBrightness",  type:"CALLS" },
+    { source:"applyFilter",            target:"adjustContrast",    type:"CALLS" },
+    { source:"applyFilter",            target:"getFilterFunc",     type:"CALLS" },
+    { source:"adjustBrightness",       target:"buildBrightnessLUT",type:"CALLS" },
+    { source:"adjustContrast",         target:"buildContrastLUT",  type:"CALLS" },
+
+    // === NAPI 模块注册 ===
+    { source:"napi_init (module)",     target:"CameraNativeModuleInit", type:"DEFINES" },
+    { source:"CameraNativeModuleInit", target:"RegisterCameraNativeModule", type:"CALLS" },
+    { source:"libcamera_native.so",    target:"napi_init (module)", type:"IMPORTS" },
+
+    // === ArkTS 层 ===
+    { source:"CameraViewModel.ets",    target:"libcamera_native.so", type:"IMPORTS", desc:"import nativeModule" },
+    { source:"CameraViewModel.ets",    target:"CameraViewModel",   type:"DEFINES" },
+    { source:"CameraPage",             target:"CameraViewModel.ets", type:"IMPORTS" },
+    { source:"CameraViewModel",        target:"CameraConstants",   type:"IMPORTS" },
+
+    // === Class 包含关系 ===
+    { source:"ImageProcessor",         target:"nv21ToRGBA_NEON",   type:"DEFINES" },
+    { source:"ImageProcessor",         target:"applyFilter",       type:"DEFINES" },
+    { source:"camera_native (module)", target:"ImageProcessor",    type:"DEFINES" },
+    { source:"camera_native (module)", target:"CameraNativeManager", type:"DEFINES" },
+    { source:"camera_native (module)", target:"FilterType",        type:"DEFINES" },
+    { source:"CameraNativeManager",    target:"processFrame",      type:"DEFINES" },
+    { source:"image_processor (module)", target:"NAPI_ApplyFilter", type:"DEFINES" },
+
+    // === 类型声明 ===
+    { source:"CameraNativeModule",     target:"libcamera_native.so", type:"DEFINES" },
+  ]
+};
+
+// ============================================================
+// 3D 渲染器
+// ============================================================
+const container = document.getElementById('graph');
+const W = container.clientWidth;
+const H = container.clientHeight;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0a0a1a);
+scene.fog = new THREE.Fog(0x0a0a1a, 50, 200);
+
+const camera = new THREE.PerspectiveCamera(55, W/H, 0.5, 500);
+camera.position.set(30, 20, 45);
+camera.lookAt(0, 0, 0);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setSize(W, H);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+container.appendChild(renderer.domElement);
+
+const labelRenderer = new CSS2DRenderer();
+labelRenderer.setSize(W, H);
+labelRenderer.domElement.style.position = 'absolute';
+labelRenderer.domElement.style.top = '0';
+labelRenderer.domElement.style.pointerEvents = 'none';
+container.appendChild(labelRenderer.domElement);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.minDistance = 8;
+controls.maxDistance = 120;
+controls.autoRotate = true;
+controls.autoRotateSpeed = 0.3;
+
+// 光照
+const ambient = new THREE.AmbientLight(0x404060, 1.5);
+scene.add(ambient);
+const dirLight = new THREE.DirectionalLight(0xffffff, 2.5);
+dirLight.position.set(30, 50, 30);
+scene.add(dirLight);
+const pointLight = new THREE.PointLight(0x6c5ce7, 30, 100);
+pointLight.position.set(0, 20, 0);
+scene.add(pointLight);
+
+// 粒子背景
+const starsGeo = new THREE.BufferGeometry();
+const starsCount = 600;
+const starsPos = new Float32Array(starsCount * 3);
+for (let i = 0; i < starsCount * 3; i += 3) {
+  starsPos[i] = (Math.random() - 0.5) * 120;
+  starsPos[i+1] = (Math.random() - 0.5) * 80;
+  starsPos[i+2] = (Math.random() - 0.5) * 120;
+}
+starsGeo.setAttribute('position', new THREE.BufferAttribute(starsPos, 3));
+const stars = new THREE.Points(starsGeo, new THREE.PointsMaterial({ color: 0x444466, size: 0.08, transparent: true, opacity: 0.6 }));
+scene.add(stars);
+
+// 颜色映射
+const colors = {
+  Method:   0xff6b6b,
+  Function: 0xffd93d,
+  Class:    0x6bcb77,
+  Module:   0x4d96ff,
+  Enum:     0x9b59b6,
+  Interface:0x9b59b6
+};
+
+const nodeMap = new Map();
+const nodeMeshes = [];
+
+// 创建节点
+graphData.nodes.forEach((n, i) => {
+  const color = colors[n.group] || 0x888888;
+  const radius = (n.size || 5) * 0.2;
+
+  // 主球体
+  const geo = new THREE.SphereGeometry(radius, 24, 24);
+  const mat = new THREE.MeshStandardMaterial({
+    color, roughness: 0.3, metalness: 0.2,
+    emissive: new THREE.Color(color).multiplyScalar(0.25)
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.castShadow = true;
+  mesh.userData = { node: n, color, baseRadius: radius };
+  scene.add(mesh);
+
+  // 光晕
+  const glowGeo = new THREE.SphereGeometry(radius * 1.3, 16, 16);
+  const glowMat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.12 });
+  const glow = new THREE.Mesh(glowGeo, glowMat);
+  mesh.add(glow);
+
+  // 外环 (仅高复杂度节点)
+  if (n.complexity >= 10) {
+    const ringGeo = new THREE.TorusGeometry(radius * 1.6, 0.08, 8, 24);
+    const ringMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5 });
+    const ring = new THREE.Mesh(ringGeo, ringMat);
+    ring.rotation.x = Math.PI / 2;
+    mesh.add(ring);
+  }
+
+  nodeMap.set(n.id, { mesh, data: n });
+  nodeMeshes.push({ mesh, data: n, idx: i });
+});
+
+// 创建边
+graphData.links.forEach(link => {
+  const src = nodeMap.get(link.source);
+  const tgt = nodeMap.get(link.target);
+  if (!src || !tgt) return;
+
+  const isCall = link.type === 'CALLS';
+  const color = isCall ? 0x6c5ce7 : 0x334466;
+
+  // 曲线路径
+  const mid = new THREE.Vector3(
+    (Math.random() - 0.5) * 3,
+    (Math.random() - 0.5) * 3 + 1,
+    (Math.random() - 0.5) * 3
+  );
+  const curve = new THREE.QuadraticBezierCurve3(
+    new THREE.Vector3(), mid, new THREE.Vector3()
+  );
+
+  const points = curve.getPoints(30);
+  const geo = new THREE.BufferGeometry().setFromPoints(points);
+  const mat = new THREE.LineBasicMaterial({
+    color, transparent: true, opacity: isCall ? 0.55 : 0.2,
+    linewidth: 0.5
+  });
+  const line = new THREE.Line(geo, mat);
+  line.userData = { link, src, tgt, curve, mid };
+  scene.add(line);
+});
+
+// 标签 (CSS2D)
+const labelObjects = [];
+graphData.nodes.forEach((n, i) => {
+  const div = document.createElement('div');
+  div.textContent = n.id.length > 28 ? n.id.slice(-28) : n.id;
+  div.style.cssText = `
+    color: ${'#' + new THREE.Color(colors[n.group] || 0x888888).getHexString()};
+    font-size: ${n.size > 8 ? '10px' : '8px'};
+    font-weight: ${n.size > 8 ? '600' : '400'};
+    text-shadow: 0 0 8px rgba(0,0,0,0.8);
+    white-space: nowrap;
+    pointer-events: none;
+  `;
+  const label = new CSS2DObject(div);
+  label.position.set(0, (n.size || 5) * 0.2 + 0.5, 0);
+  label.userData = { nodeData: n };
+  nodeMap.get(n.id).mesh.add(label);
+  labelObjects.push(label);
+});
+
+// ============================================================
+// 力导向布局
+// ============================================================
+const simulation = {
+  nodes: nodeMeshes.map(n => ({
+    mesh: n.mesh,
+    data: n.data,
+    vx: 0, vy: 0, vz: 0,
+    x: (Math.random() - 0.5) * 25,
+    y: (Math.random() - 0.5) * 18,
+    z: (Math.random() - 0.5) * 25
+  })),
+  links: graphData.links
+    .filter(l => nodeMap.has(l.source) && nodeMap.has(l.target))
+    .map(l => ({ source: l.source, target: l.target, type: l.type }))
+};
+
+// 设置初始位置
+simulation.nodes.forEach(n => {
+  n.mesh.position.set(n.x, n.y, n.z);
+});
+
+function forceSimulation(dt = 0.3) {
+  const nodes = simulation.nodes;
+  const links = simulation.links;
+
+  // 排斥力
+  for (let i = 0; i < nodes.length; i++) {
+    for (let j = i + 1; j < nodes.length; j++) {
+      const dx = nodes[j].x - nodes[i].x;
+      const dy = nodes[j].y - nodes[i].y;
+      const dz = nodes[j].z - nodes[i].z;
+      const dist = Math.sqrt(dx*dx + dy*dy + dz*dz) + 0.1;
+      const force = 12 / (dist * dist);
+      const fx = dx / dist * force * dt;
+      const fy = dy / dist * force * dt;
+      const fz = dz / dist * force * dt;
+      nodes[i].vx -= fx; nodes[i].vy -= fy; nodes[i].vz -= fz;
+      nodes[j].vx += fx; nodes[j].vy += fy; nodes[j].vz += fz;
+    }
+  }
+
+  // 引力 (边)
+  links.forEach(link => {
+    const s = simulation.nodes.find(n => n.data.id === link.source);
+    const t = simulation.nodes.find(n => n.data.id === link.target);
+    if (!s || !t) return;
+    const dx = t.x - s.x, dy = t.y - s.y, dz = t.z - s.z;
+    const dist = Math.sqrt(dx*dx + dy*dy + dz*dz) + 0.1;
+    const targetDist = link.type === 'CALLS' ? 5 : 8;
+    const force = (dist - targetDist) * 0.02 * dt;
+    const fx = dx / dist * force, fy = dy / dist * force, fz = dz / dist * force;
+    s.vx += fx; s.vy += fy; s.vz += fz;
+    t.vx -= fx; t.vy -= fy; t.vz -= fz;
+  });
+
+  // 中心引力
+  nodes.forEach(n => {
+    n.vx -= n.x * 0.003 * dt;
+    n.vy -= n.y * 0.003 * dt;
+    n.vz -= n.z * 0.003 * dt;
+  });
+
+  // 阻尼 + 更新位置
+  nodes.forEach(n => {
+    n.vx *= 0.92; n.vy *= 0.92; n.vz *= 0.92;
+    n.x += n.vx; n.y += n.vy; n.z += n.vz;
+    n.mesh.position.set(n.x, n.y, n.z);
+  });
+}
+
+// 更新边位置
+function updateEdges() {
+  scene.children.forEach(child => {
+    if (!child.isLine || !child.userData.link) return;
+    const { src, tgt, curve, mid } = child.userData;
+    curve.v0.copy(src.mesh.position);
+    curve.v2.copy(tgt.mesh.position);
+    curve.v1.copy(mid).add(
+      new THREE.Vector3().addVectors(src.mesh.position, tgt.mesh.position).multiplyScalar(0.5)
+    );
+    child.geometry.dispose();
+    child.geometry = new THREE.BufferGeometry().setFromPoints(curve.getPoints(25));
+  });
+}
+
+// ============================================================
+// 鼠标交互 — 悬停高亮
+// ============================================================
+const raycaster = new THREE.Raycaster();
+raycaster.params.Points.threshold = 0.5;
+const mouse = new THREE.Vector2();
+const tooltip = document.getElementById('tooltip');
+
+let hoveredNode = null;
+
+function onMouseMove(e) {
+  mouse.x = (e.clientX / W) * 2 - 1;
+  mouse.y = -(e.clientY / H) * 2 + 1;
+
+  raycaster.setFromCamera(mouse, camera);
+  const intersects = raycaster.intersectObjects(nodeMeshes.map(n => n.mesh), false);
+
+  if (intersects.length > 0 && intersects[0].object.userData.node) {
+    const node = intersects[0].object.userData.node;
+    if (hoveredNode !== node) {
+      resetHover();
+      hoveredNode = node;
+      const mesh = nodeMap.get(node.id).mesh;
+      mesh.material.emissive.set(0xffffff);
+      mesh.material.emissiveIntensity = 0.6;
+      mesh.scale.set(1.4, 1.4, 1.4);
+
+      // 高亮关联边
+      scene.children.forEach(child => {
+        if (child.isLine && child.userData.link) {
+          const { src, tgt } = child.userData;
+          if (src.data.id === node.id || tgt.data.id === node.id) {
+            child.material.opacity = 1;
+            child.material.color.set(0xffffff);
+          }
+        }
+      });
+
+      // 显示 tooltip
+      tooltip.innerHTML = `
+        <strong>${node.id}</strong><br>
+        <span style="color:#aaa">${node.label}</span>
+        ${node.file ? ' · <span style="color:#888">' + node.file + '</span>' : ''}<br>
+        ${node.desc ? '<span style="color:#ccc">' + node.desc + '</span><br>' : ''}
+        ${node.complexity !== undefined ? '复杂度: <span style="color:#ff6b6b">' + node.complexity + '</span>' : ''}
+      `;
+      tooltip.style.display = 'block';
+      tooltip.style.left = (e.clientX + 18) + 'px';
+      tooltip.style.top = (e.clientY - 10) + 'px';
+    }
+  } else {
+    resetHover();
+    tooltip.style.display = 'none';
+  }
+}
+
+function resetHover() {
+  if (!hoveredNode) return;
+  const mesh = nodeMap.get(hoveredNode.id)?.mesh;
+  if (mesh) {
+    const color = mesh.userData.color;
+    mesh.material.emissive.set(new THREE.Color(color).multiplyScalar(0.25));
+    mesh.material.emissiveIntensity = 1;
+    mesh.scale.set(1, 1, 1);
+  }
+  scene.children.forEach(child => {
+    if (child.isLine && child.userData.link) {
+      const isCall = child.userData.link.type === 'CALLS';
+      child.material.opacity = isCall ? 0.55 : 0.2;
+      child.material.color.set(isCall ? 0x6c5ce7 : 0x334466);
+    }
+  });
+  hoveredNode = null;
+}
+
+window.addEventListener('mousemove', onMouseMove, { passive: true });
+window.addEventListener('resize', () => {
+  const w = container.clientWidth, h = container.clientHeight;
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  renderer.setSize(w, h);
+  labelRenderer.setSize(w, h);
+});
+
+// ============================================================
+// 动画循环
+// ============================================================
+document.getElementById('nodeCount').textContent = graphData.nodes.length;
+document.getElementById('edgeCount').textContent = graphData.links.length;
+
+let simCount = 0;
+function animate() {
+  requestAnimationFrame(animate);
+
+  if (simCount < 200) {
+    forceSimulation(0.3);
+    updateEdges();
+    simCount++;
+    if (simCount === 1) {
+      // 首帧后聚合
+      for (let i = 0; i < 60; i++) { forceSimulation(0.5); }
+      updateEdges();
+    }
+  }
+
+  stars.rotation.y += 0.0002;
+  controls.update();
+  renderer.render(scene, camera);
+  labelRenderer.render(scene, camera);
+}
+
+animate();
+console.log('🚀 UnifiedCamera 3D 知识图谱已就绪 — %d 节点, %d 边', graphData.nodes.length, graphData.links.length);
+</script>
+</body>
+</html>
